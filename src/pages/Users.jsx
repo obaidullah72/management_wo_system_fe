@@ -1,9 +1,16 @@
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { UserPlus } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import Button from '../components/ui/Button'
 import ScrollReveal from '../components/ui/ScrollReveal'
-import { users } from '../data/mockData'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import ErrorMessage from '../components/ui/ErrorMessage'
+import { useAuth } from '../context/AuthContext'
+import { getUsers } from '../api/users'
+import { getErrorMessage } from '../api/client'
+import { mapUser } from '../utils/mappers'
 import { USER_ROLES } from '../constants'
 
 const roleColors = {
@@ -13,6 +20,27 @@ const roleColors = {
 }
 
 export default function Users() {
+  const { isAdmin } = useAuth()
+
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: () => getUsers(),
+  })
+
+  const users = useMemo(
+    () => (usersQuery.data ?? []).map(mapUser),
+    [usersQuery.data]
+  )
+
+  const roleCounts = useMemo(
+    () => ({
+      [USER_ROLES.ADMIN]: users.filter((u) => u.role === USER_ROLES.ADMIN).length,
+      [USER_ROLES.MANAGER]: users.filter((u) => u.role === USER_ROLES.MANAGER).length,
+      [USER_ROLES.WORKER]: users.filter((u) => u.role === USER_ROLES.WORKER).length,
+    }),
+    [users]
+  )
+
   const columns = [
     { key: 'id', label: 'User ID' },
     { key: 'name', label: 'Name' },
@@ -44,26 +72,18 @@ export default function Users() {
       ),
     },
     { key: 'lastLogin', label: 'Last Login' },
-    {
-      key: 'actions',
-      label: 'Actions',
-      render: () => (
-        <div className="flex gap-2">
-          <button type="button" className="text-xs text-slate-600 transition-colors hover:text-slate-900 hover:underline">
-            Edit
-          </button>
-          <button type="button" className="text-xs text-slate-600 transition-colors hover:text-slate-900 hover:underline">
-            Reset Password
-          </button>
-        </div>
-      ),
-    },
   ]
 
-  const roleCounts = {
-    [USER_ROLES.ADMIN]: users.filter((u) => u.role === USER_ROLES.ADMIN).length,
-    [USER_ROLES.MANAGER]: users.filter((u) => u.role === USER_ROLES.MANAGER).length,
-    [USER_ROLES.WORKER]: users.filter((u) => u.role === USER_ROLES.WORKER).length,
+  if (usersQuery.isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (usersQuery.error) {
+    return <ErrorMessage message={getErrorMessage(usersQuery.error)} />
   }
 
   return (
@@ -72,10 +92,12 @@ export default function Users() {
         title="User Management"
         description="Manage authentication, roles, and access control"
         action={
-          <Button>
-            <UserPlus className="h-4 w-4" />
-            Register User
-          </Button>
+          isAdmin ? (
+            <Button disabled title="Register form coming soon">
+              <UserPlus className="h-4 w-4" />
+              Register User
+            </Button>
+          ) : null
         }
       />
 
@@ -94,7 +116,13 @@ export default function Users() {
         ))}
       </div>
 
-      <DataTable columns={columns} data={users} delay={150} />
+      {users.length > 0 ? (
+        <DataTable columns={columns} data={users} delay={150} />
+      ) : (
+        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          No users found.
+        </p>
+      )}
     </div>
   )
 }

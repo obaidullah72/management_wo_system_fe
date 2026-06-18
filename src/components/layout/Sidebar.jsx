@@ -7,8 +7,12 @@ import {
   Factory,
   FileBarChart,
   Users,
+  Boxes,
+  MapPin,
+  LogOut,
 } from 'lucide-react'
-import { NAV_ITEMS } from '../../constants'
+import { useAuth } from '../../context/AuthContext'
+import { getNavItemsForRole } from '../../constants'
 
 const iconMap = {
   LayoutDashboard,
@@ -18,9 +22,24 @@ const iconMap = {
   Factory,
   FileBarChart,
   Users,
+  Boxes,
+  MapPin,
+}
+
+function getInitials(name) {
+  if (!name) return '?'
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 }
 
 export default function Sidebar() {
+  const { user, roleLabel, logout } = useAuth()
+  const navItems = getNavItemsForRole(user?.role)
+
   return (
     <aside className="flex w-64 flex-col border-r border-slate-200 bg-slate-900 text-white">
       <div className="border-b border-slate-700 px-6 py-5">
@@ -36,7 +55,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const Icon = iconMap[item.icon]
           return (
             <NavLink
@@ -59,14 +78,22 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-slate-700 px-4 py-4">
-        <div className="group flex cursor-default items-center gap-3 rounded-lg p-1 transition-colors hover:bg-slate-800">
+        <div className="group flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-slate-800">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-600 text-xs font-bold transition-transform duration-300 group-hover:scale-110">
-            SC
+            {getInitials(user?.full_name)}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">Sarah Chen</p>
-            <p className="truncate text-xs text-slate-400">Administrator</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{user?.full_name}</p>
+            <p className="truncate text-xs text-slate-400">{roleLabel}</p>
           </div>
+          <button
+            type="button"
+            onClick={logout}
+            title="Sign out"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </aside>

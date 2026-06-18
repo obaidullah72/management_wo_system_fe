@@ -1,7 +1,13 @@
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import ScrollReveal from '../components/ui/ScrollReveal'
-import { inventory } from '../data/mockData'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import ErrorMessage from '../components/ui/ErrorMessage'
+import { getInventorySummary } from '../api/inventory'
+import { getErrorMessage } from '../api/client'
+import { mapInventoryRow } from '../utils/mappers'
 import { INVENTORY_STATUS, ITEM_TYPES } from '../constants'
 
 const statusColors = {
@@ -17,6 +23,25 @@ const summaryCards = [
 ]
 
 export default function Inventory() {
+  const inventoryQuery = useQuery({
+    queryKey: ['inventory', 'summary'],
+    queryFn: getInventorySummary,
+  })
+
+  const inventory = useMemo(
+    () => (inventoryQuery.data ?? []).map(mapInventoryRow),
+    [inventoryQuery.data]
+  )
+
+  const counts = useMemo(
+    () => ({
+      total: inventory.length,
+      inStock: inventory.filter((i) => i.status === INVENTORY_STATUS.IN_STOCK).length,
+      lowStock: inventory.filter((i) => i.status === INVENTORY_STATUS.LOW_STOCK).length,
+    }),
+    [inventory]
+  )
+
   const columns = [
     { key: 'id', label: 'Inventory ID' },
     { key: 'itemName', label: 'Item' },
@@ -60,10 +85,16 @@ export default function Inventory() {
     { key: 'lastUpdated', label: 'Last Updated' },
   ]
 
-  const counts = {
-    total: inventory.length,
-    inStock: inventory.filter((i) => i.status === INVENTORY_STATUS.IN_STOCK).length,
-    lowStock: inventory.filter((i) => i.status === INVENTORY_STATUS.LOW_STOCK).length,
+  if (inventoryQuery.isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (inventoryQuery.error) {
+    return <ErrorMessage message={getErrorMessage(inventoryQuery.error)} />
   }
 
   return (
@@ -80,7 +111,9 @@ export default function Inventory() {
               <p className="text-sm text-slate-500 transition-colors group-hover:text-slate-700">
                 {card.label}
               </p>
-              <p className={`mt-1 text-2xl font-bold transition-transform duration-300 group-hover:scale-105 ${card.color}`}>
+              <p
+                className={`mt-1 text-2xl font-bold transition-transform duration-300 group-hover:scale-105 ${card.color}`}
+              >
                 {counts[card.key]}
               </p>
             </div>
@@ -88,7 +121,13 @@ export default function Inventory() {
         ))}
       </div>
 
-      <DataTable columns={columns} data={inventory} delay={150} />
+      {inventory.length > 0 ? (
+        <DataTable columns={columns} data={inventory} delay={150} />
+      ) : (
+        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          No inventory data available.
+        </p>
+      )}
     </div>
   )
 }

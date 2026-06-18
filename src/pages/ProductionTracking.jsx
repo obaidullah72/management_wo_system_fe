@@ -1,13 +1,74 @@
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import ScrollReveal from '../components/ui/ScrollReveal'
-import { productionRecords, workOrders } from '../data/mockData'
-import { WORK_ORDER_STATUS } from '../constants'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import ErrorMessage from '../components/ui/ErrorMessage'
+import { useAuth } from '../context/AuthContext'
+import { getProductionHistory } from '../api/production'
+import { getWorkOrders } from '../api/workOrders'
+import { getItems } from '../api/items'
+import { getUsers } from '../api/users'
+import { getErrorMessage } from '../api/client'
+import {
+  buildLookup,
+  mapProductionRecord,
+  mapWorkOrder,
+} from '../utils/mappers'
+import { BACKEND_WORK_ORDER_STATUS } from '../constants'
 
 export default function ProductionTracking() {
-  const inProduction = workOrders.filter(
-    (wo) => wo.status === WORK_ORDER_STATUS.IN_PRODUCTION
-  )
+  const { isManagerOrAdmin } = useAuth()
+
+  const productionQuery = useQuery({
+    queryKey: ['production', 'history'],
+    queryFn: () => getProductionHistory(),
+  })
+
+  const workOrdersQuery = useQuery({
+    queryKey: ['work-orders'],
+    queryFn: () => getWorkOrders(),
+  })
+
+  const itemsQuery = useQuery({
+    queryKey: ['items'],
+    queryFn: () => getItems({ active_only: true }),
+  })
+
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: () => getUsers(),
+    enabled: isManagerOrAdmin,
+  })
+
+  const isLoading =
+    productionQuery.isLoading ||
+    workOrdersQuery.isLoading ||
+    itemsQuery.isLoading ||
+    (isManagerOrAdmin && usersQuery.isLoading)
+
+  const error =
+    productionQuery.error ||
+    workOrdersQuery.error ||
+    itemsQuery.error ||
+    (isManagerOrAdmin ? usersQuery.error : null)
+
+  const itemsMap = buildLookup(itemsQuery.data ?? [])
+  const usersMap = buildLookup(usersQuery.data ?? [])
+  const workOrdersRawMap = buildLookup(workOrdersQuery.data ?? [])
+
+  const inProduction = useMemo(() => {
+    return (workOrdersQuery.data ?? [])
+      .filter((wo) => wo.status === BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION)
+      .map((wo) => mapWorkOrder(wo, itemsMap, usersMap))
+  }, [workOrdersQuery.data, itemsMap, usersMap])
+
+  const productionRecords = useMemo(() => {
+    return (productionQuery.data ?? []).map((record) =>
+      mapProductionRecord(record, workOrdersRawMap, itemsMap, usersMap)
+    )
+  }, [productionQuery.data, workOrdersRawMap, itemsMap, usersMap])
 
   const recordColumns = [
     { key: 'id', label: 'Record ID' },
@@ -54,6 +115,18 @@ export default function ProductionTracking() {
     },
   ]
 
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return <ErrorMessage message={getErrorMessage(error)} />
+  }
+
   return (
     <div>
       <PageHeader
@@ -84,7 +157,13 @@ export default function ProductionTracking() {
             Production History
           </h2>
         </ScrollReveal>
-        <DataTable columns={recordColumns} data={productionRecords} delay={200} />
+        {productionRecords.length > 0 ? (
+          <DataTable columns={recordColumns} data={productionRecords} delay={200} />
+        ) : (
+          <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            No production records yet.
+          </p>
+        )}
       </div>
     </div>
   )

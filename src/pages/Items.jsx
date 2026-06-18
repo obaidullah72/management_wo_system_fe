@@ -1,11 +1,38 @@
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import Button from '../components/ui/Button'
-import { items } from '../data/mockData'
+import LoadingSpinner from '../components/ui/LoadingSpinner'
+import ErrorMessage from '../components/ui/ErrorMessage'
+import { getItems } from '../api/items'
+import { getErrorMessage } from '../api/client'
+import { itemTypeToBackend, mapItem } from '../utils/mappers'
 import { ITEM_TYPES } from '../constants'
 
+const TYPE_FILTERS = ['All Items', 'Raw Materials', 'Finished Goods']
+
 export default function Items() {
+  const [typeFilter, setTypeFilter] = useState('All Items')
+
+  const itemTypeParam =
+    typeFilter === 'All Items' ? undefined : itemTypeToBackend(typeFilter)
+
+  const itemsQuery = useQuery({
+    queryKey: ['items', itemTypeParam],
+    queryFn: () =>
+      getItems({
+        active_only: true,
+        ...(itemTypeParam ? { item_type: itemTypeParam } : {}),
+      }),
+  })
+
+  const items = useMemo(
+    () => (itemsQuery.data ?? []).map(mapItem),
+    [itemsQuery.data]
+  )
+
   const columns = [
     { key: 'id', label: 'Item ID' },
     { key: 'name', label: 'Item Name' },
@@ -45,21 +72,19 @@ export default function Items() {
         </span>
       ),
     },
-    {
-      key: 'actions',
-      label: 'Actions',
-      render: () => (
-        <div className="flex gap-2">
-          <button type="button" className="text-xs text-slate-600 transition-colors hover:text-slate-900 hover:underline">
-            Edit
-          </button>
-          <button type="button" className="text-xs text-red-500 transition-colors hover:text-red-700 hover:underline">
-            Delete
-          </button>
-        </div>
-      ),
-    },
   ]
+
+  if (itemsQuery.isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (itemsQuery.error) {
+    return <ErrorMessage message={getErrorMessage(itemsQuery.error)} />
+  }
 
   return (
     <div>
@@ -67,7 +92,7 @@ export default function Items() {
         title="Item Management"
         description="Manage products and materials used in manufacturing"
         action={
-          <Button>
+          <Button disabled title="Create form coming soon">
             <Plus className="h-4 w-4" />
             Add New Item
           </Button>
@@ -75,12 +100,13 @@ export default function Items() {
       />
 
       <div className="mb-4 flex gap-2">
-        {['All Items', 'Raw Materials', 'Finished Goods'].map((filter, i) => (
+        {TYPE_FILTERS.map((filter) => (
           <button
             key={filter}
             type="button"
+            onClick={() => setTypeFilter(filter)}
             className={`filter-chip rounded-lg px-3 py-1.5 text-xs font-medium ${
-              i === 0
+              filter === typeFilter
                 ? 'bg-slate-800 text-white'
                 : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
             }`}
@@ -90,7 +116,13 @@ export default function Items() {
         ))}
       </div>
 
-      <DataTable columns={columns} data={items} delay={100} />
+      {items.length > 0 ? (
+        <DataTable columns={columns} data={items} delay={100} />
+      ) : (
+        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          No items found.
+        </p>
+      )}
     </div>
   )
 }
