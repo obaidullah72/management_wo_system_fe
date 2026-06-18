@@ -132,6 +132,7 @@ export default function Dashboard() {
                   {dashboardStats.lowStockItems} item(s) below reorder level
                 </p>
               </div>
+              </div>
             </ScrollReveal>
           )}
         </div>

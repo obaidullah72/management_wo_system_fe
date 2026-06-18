@@ -50,10 +50,10 @@ export default function Items() {
       label: 'Actions',
       render: () => (
         <div className="flex gap-2">
-          <button type="button" className="text-xs text-slate-600 hover:text-slate-900">
+          <button type="button" className="text-xs text-slate-600 transition-colors hover:text-slate-900 hover:underline">
             Edit
           </button>
-          <button type="button" className="text-xs text-red-500 hover:text-red-700">
+          <button type="button" className="text-xs text-red-500 transition-colors hover:text-red-700 hover:underline">
             Delete
           </button>
         </div>
