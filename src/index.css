@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scroll reveal animations */
+.scroll-reveal {
+  opacity: 0;
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.scroll-reveal-up {
+  transform: translateY(28px);
+}
+
+.scroll-reveal-left {
+  transform: translateX(-28px);
+}
+
+.scroll-reveal-right {
+  transform: translateX(28px);
+}
+
+.scroll-reveal-fade {
+  transform: none;
+}
+
+.scroll-reveal-visible {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+/* Hover lift card */
+.hover-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 12px 24px -8px rgb(15 23 42 / 0.12),
+    0 4px 8px -4px rgb(15 23 42 / 0.08);
+}
+
+/* Interactive row */
+.hover-row {
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.hover-row:hover {
+  background-color: rgb(248 250 252);
+  transform: scale(1.005);
+  box-shadow: inset 3px 0 0 0 rgb(51 65 85);
+}
+
+/* Nav link slide */
+.nav-link-hover {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    padding-left 0.2s ease;
+}
+
+.nav-link-hover:hover {
+  transform: translateX(4px);
+}
+
+/* Icon bounce on parent hover */
+.group:hover .icon-hover-bounce {
+  transform: scale(1.15) rotate(-3deg);
+}
+
+.icon-hover-bounce {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Button press */
+.btn-interactive {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.btn-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.2);
+}
+
+.btn-interactive:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Activity list item */
+.activity-item {
+  transition:
+    background-color 0.2s ease,
+    padding-left 0.2s ease;
+}
+
+.activity-item:hover {
+  background-color: rgb(248 250 252);
+  padding-left: 1.25rem;
+}
+
+/* Progress bar fill animation */
+.progress-fill {
+  transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Filter chip */
+.filter-chip {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.filter-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px -2px rgb(15 23 42 / 0.15);
+}
+
+/* Smooth main scroll */
+main {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .hover-lift:hover,
+  .hover-row:hover,
+  .nav-link-hover:hover,
+  .btn-interactive:hover,
+  .filter-chip:hover {
+    transform: none;
+  }
+}
