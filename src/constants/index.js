@@ -155,9 +155,10 @@ export const REPORT_DEFINITIONS = [
   {
     id: 'daily-production',
     name: 'Daily Production Report',
-    description: 'Summary of units produced across all lines for the current day',
+    description: 'Summary of units produced across all lines for a selected day',
     format: 'JSON',
     fetcher: 'dailyProduction',
+    dateFields: [{ key: 'report_date', label: 'Report Date', type: 'date', defaultToday: true }],
   },
   {
     id: 'inventory-status',
@@ -165,6 +166,7 @@ export const REPORT_DEFINITIONS = [
     description: 'Current stock levels, locations, and low-stock alerts',
     format: 'JSON',
     fetcher: 'inventoryStatus',
+    dateFields: [],
   },
   {
     id: 'completed-work-orders',
@@ -172,13 +174,18 @@ export const REPORT_DEFINITIONS = [
     description: 'List of finalized and production-complete work orders',
     format: 'JSON',
     fetcher: 'completedWorkOrders',
+    dateFields: [],
   },
   {
     id: 'production-activity',
     name: 'Production Activity Report',
-    description: 'Detailed production history with shift and operator data',
+    description: 'Detailed production history within a date range',
     format: 'JSON',
     fetcher: 'productionActivity',
+    dateFields: [
+      { key: 'start_date', label: 'Start Date', type: 'date' },
+      { key: 'end_date', label: 'End Date', type: 'date', defaultToday: true },
+    ],
   },
 ]
 

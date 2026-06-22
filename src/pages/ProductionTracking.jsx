@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
@@ -20,6 +20,7 @@ import {
   mapProductionRecord,
   mapWorkOrder,
 } from '../utils/mappers'
+import { buildRawMaterialRows } from '../utils/productionHelpers'
 import { BACKEND_WORK_ORDER_STATUS } from '../constants'
 
 export default function ProductionTracking() {
@@ -31,6 +32,7 @@ export default function ProductionTracking() {
     quantity_produced: '',
     notes: '',
   })
+  const [rawMaterials, setRawMaterials] = useState([])
   const [formError, setFormError] = useState('')
 
   const productionQuery = useQuery({
@@ -54,13 +56,50 @@ export default function ProductionTracking() {
     enabled: isManagerOrAdmin,
   })
 
+  const itemsMap = buildLookup(itemsQuery.data ?? [])
+  const usersMap = buildLookup(usersQuery.data ?? [])
+  const workOrdersRawMap = buildLookup(workOrdersQuery.data ?? [])
+
+  const inProductionOrders = useMemo(
+    () =>
+      (workOrdersQuery.data ?? []).filter(
+        (wo) => wo.status === BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION
+      ),
+    [workOrdersQuery.data]
+  )
+
+  const selectedWorkOrder = workOrdersRawMap[form.work_order_id]
+
+  useEffect(() => {
+    if (!selectedWorkOrder) {
+      setRawMaterials([])
+      return
+    }
+    const lookup = buildLookup(itemsQuery.data ?? [])
+    setRawMaterials(
+      buildRawMaterialRows(selectedWorkOrder, form.quantity_produced, lookup)
+    )
+  }, [selectedWorkOrder, form.quantity_produced, itemsQuery.data])
+
   const recordMutation = useMutation({
-    mutationFn: () =>
-      recordProduction({
+    mutationFn: () => {
+      const payload = {
         work_order_id: form.work_order_id,
         quantity_produced: parseFloat(form.quantity_produced),
         notes: form.notes.trim() || null,
-      }),
+      }
+
+      if (rawMaterials.length > 0) {
+        payload.raw_materials_consumed = rawMaterials
+          .filter((row) => parseFloat(row.quantity) > 0)
+          .map((row) => ({
+            item_id: row.item_id,
+            quantity: parseFloat(row.quantity),
+          }))
+      }
+
+      return recordProduction(payload)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production'] })
       queryClient.invalidateQueries({ queryKey: ['work-orders'] })
@@ -68,6 +107,7 @@ export default function ProductionTracking() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       setRecordOpen(false)
       setForm({ work_order_id: '', quantity_produced: '', notes: '' })
+      setRawMaterials([])
       setFormError('')
     },
     onError: (error) => setFormError(getErrorMessage(error)),
@@ -85,18 +125,6 @@ export default function ProductionTracking() {
     itemsQuery.error ||
     (isManagerOrAdmin ? usersQuery.error : null)
 
-  const itemsMap = buildLookup(itemsQuery.data ?? [])
-  const usersMap = buildLookup(usersQuery.data ?? [])
-  const workOrdersRawMap = buildLookup(workOrdersQuery.data ?? [])
-
-  const inProductionOrders = useMemo(
-    () =>
-      (workOrdersQuery.data ?? []).filter(
-        (wo) => wo.status === BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION
-      ),
-    [workOrdersQuery.data]
-  )
-
   const inProduction = useMemo(() => {
     return inProductionOrders.map((wo) => mapWorkOrder(wo, itemsMap, usersMap))
   }, [inProductionOrders, itemsMap, usersMap])
@@ -106,6 +134,27 @@ export default function ProductionTracking() {
       mapProductionRecord(record, workOrdersRawMap, itemsMap, usersMap)
     )
   }, [productionQuery.data, workOrdersRawMap, itemsMap, usersMap])
+
+  const openRecordModal = () => {
+    const firstWo = inProductionOrders[0]
+    setForm({
+      work_order_id: firstWo?.id ?? '',
+      quantity_produced: '',
+      notes: '',
+    })
+    setFormError('')
+    setRecordOpen(true)
+  }
+
+  const handleWorkOrderChange = (workOrderId) => {
+    setForm((prev) => ({ ...prev, work_order_id: workOrderId, quantity_produced: '' }))
+  }
+
+  const updateRawMaterialQuantity = (index, quantity) => {
+    setRawMaterials((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, quantity } : row))
+    )
+  }
 
   const recordColumns = [
     { key: 'id', label: 'Record ID' },
@@ -168,15 +217,7 @@ export default function ProductionTracking() {
         description="Monitor production output, progress, and completion history"
         action={
           <Button
-            onClick={() => {
-              setForm({
-                work_order_id: inProductionOrders[0]?.id ?? '',
-                quantity_produced: '',
-                notes: '',
-              })
-              setFormError('')
-              setRecordOpen(true)
-            }}
+            onClick={openRecordModal}
             disabled={inProductionOrders.length === 0}
             title={
               inProductionOrders.length === 0
@@ -224,6 +265,7 @@ export default function ProductionTracking() {
         open={recordOpen}
         onClose={() => setRecordOpen(false)}
         title="Record Production"
+        size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setRecordOpen(false)}>
@@ -241,7 +283,7 @@ export default function ProductionTracking() {
             <SelectInput
               id="prod-wo"
               value={form.work_order_id}
-              onChange={(e) => setForm({ ...form, work_order_id: e.target.value })}
+              onChange={(e) => handleWorkOrderChange(e.target.value)}
             >
               <option value="">Select work order...</option>
               {inProductionOrders.map((wo) => {
@@ -266,6 +308,42 @@ export default function ProductionTracking() {
               onChange={(e) => setForm({ ...form, quantity_produced: e.target.value })}
             />
           </FormField>
+
+          {rawMaterials.length > 0 && (
+            <div>
+              <p className="mb-2 text-sm font-medium text-slate-700">
+                Raw Material Consumption (from BOM)
+              </p>
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                {rawMaterials.map((row, index) => (
+                  <div
+                    key={row.item_id}
+                    className="grid grid-cols-1 items-center gap-2 sm:grid-cols-3"
+                  >
+                    <span className="text-sm text-slate-700">
+                      {row.itemName}
+                      <span className="ml-1 text-xs text-slate-400">
+                        (plan: {row.plannedTotal} {row.unit})
+                      </span>
+                    </span>
+                    <TextInput
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={row.quantity}
+                      onChange={(e) => updateRawMaterialQuantity(index, e.target.value)}
+                      placeholder="Qty consumed"
+                    />
+                    <span className="text-xs text-slate-500">{row.unit}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Quantities auto-calculated from BOM based on units produced. Adjust if needed.
+              </p>
+            </div>
+          )}
+
           <FormField label="Notes" htmlFor="prod-notes">
             <TextArea
               id="prod-notes"

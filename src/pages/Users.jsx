@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Trash2, UserPlus } from 'lucide-react'
+import { Pencil, ShieldOff, Trash2, UserPlus } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import Button from '../components/ui/Button'
@@ -12,6 +12,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ErrorMessage from '../components/ui/ErrorMessage'
 import { useAuth } from '../context/AuthContext'
 import { createUser, deleteUser, getUsers, updateUser } from '../api/users'
+import { revokeUserSessions } from '../api/auth'
 import { getErrorMessage } from '../api/client'
 import { mapUser } from '../utils/mappers'
 import { BACKEND_ROLES, USER_ROLES } from '../constants'
@@ -37,6 +38,7 @@ export default function Users() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [revokeTarget, setRevokeTarget] = useState(null)
   const [createForm, setCreateForm] = useState(emptyCreateForm)
   const [editForm, setEditForm] = useState({
     first_name: '',
@@ -86,6 +88,12 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setDeleteTarget(null)
     },
+  })
+
+  const revokeMutation = useMutation({
+    mutationFn: (userId) => revokeUserSessions(userId),
+    onSuccess: () => setRevokeTarget(null),
+    onError: (error) => setFormError(getErrorMessage(error)),
   })
 
   const users = useMemo(
@@ -161,14 +169,24 @@ export default function Users() {
                   <Pencil className="h-4 w-4" />
                 </button>
                 {row.raw.id !== currentUser?.id && (
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(row)}
-                    className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
-                    title="Delete user"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setRevokeTarget(row)}
+                      className="rounded p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-700"
+                      title="Revoke all sessions"
+                    >
+                      <ShieldOff className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(row)}
+                      className="rounded p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600"
+                      title="Delete user"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
                 )}
               </div>
             ),
@@ -374,6 +392,17 @@ export default function Users() {
           </FormField>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(revokeTarget)}
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={() => revokeMutation.mutate(revokeTarget.raw.id)}
+        title="Revoke Sessions"
+        message={`Force logout "${revokeTarget?.name}" from all devices? They will need to sign in again.`}
+        confirmLabel="Revoke Sessions"
+        variant="primary"
+        isLoading={revokeMutation.isPending}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

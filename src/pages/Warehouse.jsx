@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import Button from '../components/ui/Button'
@@ -14,11 +14,13 @@ import { useAuth } from '../context/AuthContext'
 import {
   createWarehouseLocation,
   deleteWarehouseLocation,
+  getLocationPallets,
   getWarehouseLocations,
   updateWarehouseLocation,
 } from '../api/warehouse'
+import { getItems } from '../api/items'
 import { getErrorMessage } from '../api/client'
-import { mapWarehouseLocation } from '../utils/mappers'
+import { buildLookup, mapPallet, mapWarehouseLocation } from '../utils/mappers'
 
 const summaryCards = [
   { label: 'Total Locations', key: 'total', color: 'text-slate-900' },
@@ -40,12 +42,24 @@ export default function Warehouse() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingLocation, setEditingLocation] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [palletsTarget, setPalletsTarget] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [formError, setFormError] = useState('')
 
   const locationsQuery = useQuery({
     queryKey: ['warehouse', 'locations'],
     queryFn: () => getWarehouseLocations({ active_only: false }),
+  })
+
+  const itemsQuery = useQuery({
+    queryKey: ['items'],
+    queryFn: () => getItems({ active_only: true }),
+  })
+
+  const locationPalletsQuery = useQuery({
+    queryKey: ['warehouse', 'location-pallets', palletsTarget?.id],
+    queryFn: () => getLocationPallets(palletsTarget.id),
+    enabled: Boolean(palletsTarget?.id),
   })
 
   const saveMutation = useMutation({
@@ -95,6 +109,14 @@ export default function Warehouse() {
   const locations = useMemo(
     () => (locationsQuery.data ?? []).map(mapWarehouseLocation),
     [locationsQuery.data]
+  )
+
+  const itemsMap = buildLookup(itemsQuery.data ?? [])
+
+  const locationPallets = useMemo(
+    () =>
+      (locationPalletsQuery.data ?? []).map((pallet) => mapPallet(pallet, itemsMap, {})),
+    [locationPalletsQuery.data, itemsMap]
   )
 
   const counts = useMemo(
@@ -155,6 +177,21 @@ export default function Warehouse() {
       ),
     },
     { key: 'createdAt', label: 'Created' },
+    {
+      key: 'viewPallets',
+      label: 'Pallets',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => setPalletsTarget(row)}
+          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+          title="View pallets at location"
+        >
+          <Boxes className="h-3.5 w-3.5" />
+          View ({row.palletCount})
+        </button>
+      ),
+    },
     ...(isManagerOrAdmin
       ? [
           {
@@ -309,6 +346,46 @@ export default function Warehouse() {
         confirmLabel="Delete"
         isLoading={deleteMutation.isPending}
       />
+
+      <Modal
+        open={Boolean(palletsTarget)}
+        onClose={() => setPalletsTarget(null)}
+        title={`Pallets at ${palletsTarget?.locationCode ?? 'Location'}`}
+        size="lg"
+        footer={
+          <Button variant="secondary" onClick={() => setPalletsTarget(null)}>
+            Close
+          </Button>
+        }
+      >
+        {locationPalletsQuery.isLoading ? (
+          <div className="flex justify-center py-8">
+            <LoadingSpinner />
+          </div>
+        ) : locationPalletsQuery.error ? (
+          <ErrorMessage message={getErrorMessage(locationPalletsQuery.error)} />
+        ) : locationPallets.length > 0 ? (
+          <ul className="divide-y divide-slate-100">
+            {locationPallets.map((pallet) => (
+              <li key={pallet.palletId} className="flex items-center justify-between py-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">{pallet.id}</p>
+                  <p className="text-xs text-slate-500">
+                    {pallet.itemName} · Qty {pallet.quantity}
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                  {pallet.status?.replace(/_/g, ' ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="py-6 text-center text-sm text-slate-500">
+            No pallets stored at this location.
+          </p>
+        )}
+      </Modal>
     </div>
   )
 }

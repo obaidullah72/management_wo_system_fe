@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Factory, Lock, User } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../api/client'
@@ -87,6 +87,15 @@ export default function Login() {
                 />
               </div>
             </div>
+          </div>
+
+          <div className="mt-2 text-right">
+            <Link
+              to="/forgot-password"
+              className="text-xs text-slate-400 hover:text-slate-200"
+            >
+              Forgot password?
+            </Link>
           </div>
 
           <Button type="submit" className="mt-6 w-full justify-center" disabled={isSubmitting}>

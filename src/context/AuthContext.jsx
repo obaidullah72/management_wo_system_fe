@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import * as authApi from '../api/auth'
-import { clearStoredToken, getStoredToken, setStoredToken } from '../api/client'
+import { clearStoredTokens, getStoredToken, setStoredTokens } from '../api/client'
 import { mapUserRole } from '../utils/mappers'
 import { BACKEND_ROLES, hasMinRole } from '../constants'
 
@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
       setUser(profile)
       setError(null)
     } catch {
-      clearStoredToken()
+      clearStoredTokens()
       setUser(null)
     } finally {
       setIsLoading(false)
@@ -38,7 +38,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     setError(null)
     const tokenData = await authApi.login({ username, password })
-    setStoredToken(tokenData.access_token)
+    setStoredTokens(tokenData)
     const profile = await authApi.getMe()
     setUser(profile)
     return profile
@@ -50,7 +50,7 @@ export function AuthProvider({ children }) {
     } catch {
       // Client-side logout is sufficient for JWT
     } finally {
-      clearStoredToken()
+      clearStoredTokens()
       setUser(null)
     }
   }, [])

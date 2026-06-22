@@ -3,6 +3,8 @@ import { BACKEND_ROLES } from '../constants'
 import MainLayout from '../components/layout/MainLayout'
 import { ProtectedRoute, RoleRoute, GuestRoute } from '../components/auth/ProtectedRoute'
 import Login from '../pages/Login'
+import ForgotPassword from '../pages/ForgotPassword'
+import ResetPassword from '../pages/ResetPassword'
 import Dashboard from '../pages/Dashboard'
 import WorkOrders from '../pages/WorkOrders'
 import Items from '../pages/Items'
@@ -20,6 +22,8 @@ export default function AppRoutes() {
       <Routes>
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>

@@ -38,3 +38,15 @@ export function formatRelativeTime(value) {
   if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
   return formatDateTime(value)
 }
+
+export function todayDateInput() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export function toDatetimeLocalValue(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}

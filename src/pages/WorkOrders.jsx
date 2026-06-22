@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
+  Pencil,
   Plus,
   Trash2,
   UserPlus,
@@ -21,6 +22,7 @@ import {
   createWorkOrder,
   deleteWorkOrder,
   getWorkOrders,
+  updateWorkOrder,
   updateWorkOrderStatus,
 } from '../api/workOrders'
 import { getItems } from '../api/items'
@@ -39,6 +41,7 @@ import {
   PRODUCTION_LINES,
   WORK_ORDER_STATUS,
 } from '../constants'
+import { toDatetimeLocalValue } from '../utils/format'
 
 const STATUS_FILTERS = [
   'All',
@@ -62,9 +65,11 @@ export default function WorkOrders() {
   const { isManagerOrAdmin } = useAuth()
   const [statusFilter, setStatusFilter] = useState('All')
   const [createOpen, setCreateOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
   const [assignTarget, setAssignTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [createForm, setCreateForm] = useState(emptyCreateForm)
+  const [editForm, setEditForm] = useState(emptyCreateForm)
   const [assignUserId, setAssignUserId] = useState('')
   const [formError, setFormError] = useState('')
 
@@ -108,6 +113,24 @@ export default function WorkOrders() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       setCreateOpen(false)
       setCreateForm(emptyCreateForm)
+      setFormError('')
+    },
+    onError: (error) => setFormError(getErrorMessage(error)),
+  })
+
+  const editMutation = useMutation({
+    mutationFn: () =>
+      updateWorkOrder(editTarget.workOrderId, {
+        quantity_ordered: parseFloat(editForm.quantity_ordered),
+        production_line: editForm.production_line || null,
+        scheduled_date: editForm.scheduled_date
+          ? new Date(editForm.scheduled_date).toISOString()
+          : null,
+        notes: editForm.notes.trim() || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      setEditTarget(null)
       setFormError('')
     },
     onError: (error) => setFormError(getErrorMessage(error)),
@@ -170,6 +193,18 @@ export default function WorkOrders() {
     return next
   }
 
+  const openEdit = (row) => {
+    setEditTarget(row)
+    setEditForm({
+      item_id: row.raw.item_id,
+      quantity_ordered: String(row.raw.quantity_ordered),
+      production_line: row.raw.production_line ?? PRODUCTION_LINES[0],
+      scheduled_date: toDatetimeLocalValue(row.raw.scheduled_date),
+      notes: row.raw.notes ?? '',
+    })
+    setFormError('')
+  }
+
   const columns = [
     { key: 'id', label: 'Work Order ID' },
     { key: 'itemName', label: 'Item' },
@@ -200,6 +235,17 @@ export default function WorkOrders() {
         const nextStatus = getNextStatus(row.raw.status)
         return (
           <div className="flex flex-wrap gap-1">
+            {isManagerOrAdmin &&
+              row.raw.status !== BACKEND_WORK_ORDER_STATUS.FINALIZED && (
+                <button
+                  type="button"
+                  onClick={() => openEdit(row)}
+                  className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  title="Edit work order"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
             {isManagerOrAdmin && (
               <button
                 type="button"
@@ -299,7 +345,7 @@ export default function WorkOrders() {
         ))}
       </div>
 
-      {formError && !createOpen && !assignTarget && (
+      {formError && !createOpen && !assignTarget && !editTarget && (
         <ErrorMessage message={formError} className="mb-4" />
       )}
 
@@ -390,6 +436,79 @@ export default function WorkOrders() {
               id="wo-notes"
               value={createForm.notes}
               onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
+            />
+          </FormField>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(editTarget)}
+        onClose={() => setEditTarget(null)}
+        title={`Edit ${editTarget?.id ?? 'Work Order'}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}>
+              {editMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {formError && <ErrorMessage message={formError} />}
+          <FormField label="Item" htmlFor="edit-wo-item">
+            <TextInput
+              id="edit-wo-item"
+              disabled
+              value={editTarget?.itemName ?? ''}
+            />
+          </FormField>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Quantity Ordered" htmlFor="edit-wo-qty">
+              <TextInput
+                id="edit-wo-qty"
+                type="number"
+                min="0.01"
+                step="any"
+                value={editForm.quantity_ordered}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, quantity_ordered: e.target.value })
+                }
+              />
+            </FormField>
+            <FormField label="Production Line" htmlFor="edit-wo-line">
+              <SelectInput
+                id="edit-wo-line"
+                value={editForm.production_line}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, production_line: e.target.value })
+                }
+              >
+                {PRODUCTION_LINES.map((line) => (
+                  <option key={line} value={line}>
+                    {line}
+                  </option>
+                ))}
+              </SelectInput>
+            </FormField>
+          </div>
+          <FormField label="Scheduled Date" htmlFor="edit-wo-date">
+            <TextInput
+              id="edit-wo-date"
+              type="datetime-local"
+              value={editForm.scheduled_date}
+              onChange={(e) =>
+                setEditForm({ ...editForm, scheduled_date: e.target.value })
+              }
+            />
+          </FormField>
+          <FormField label="Notes" htmlFor="edit-wo-notes">
+            <TextArea
+              id="edit-wo-notes"
+              value={editForm.notes}
+              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
             />
           </FormField>
         </div>
