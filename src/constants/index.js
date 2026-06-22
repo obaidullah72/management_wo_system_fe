@@ -52,6 +52,36 @@ export const INVENTORY_STATUS = {
 
 export const PRODUCTION_LINES = ['Line A', 'Line B', 'Line C', 'Line D']
 
+export const UNITS_OF_MEASURE = [
+  { value: 'pcs', label: 'Pieces (pcs)' },
+  { value: 'kg', label: 'Kilograms (kg)' },
+  { value: 'g', label: 'Grams (g)' },
+  { value: 'l', label: 'Liters (l)' },
+  { value: 'ml', label: 'Milliliters (ml)' },
+  { value: 'm', label: 'Meters (m)' },
+  { value: 'box', label: 'Box' },
+  { value: 'pallet', label: 'Pallet' },
+]
+
+export const BACKEND_PALLET_STATUS = {
+  IN_PRODUCTION: 'in_production',
+  IN_WAREHOUSE: 'in_warehouse',
+  SHIPPED: 'shipped',
+}
+
+export const PALLET_STATUS_LABELS = {
+  [BACKEND_PALLET_STATUS.IN_PRODUCTION]: 'In Production',
+  [BACKEND_PALLET_STATUS.IN_WAREHOUSE]: 'In Warehouse',
+  [BACKEND_PALLET_STATUS.SHIPPED]: 'Shipped',
+}
+
+export const NEXT_WORK_ORDER_STATUS = {
+  [BACKEND_WORK_ORDER_STATUS.STAGED]: BACKEND_WORK_ORDER_STATUS.SCHEDULED,
+  [BACKEND_WORK_ORDER_STATUS.SCHEDULED]: BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION,
+  [BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION]: BACKEND_WORK_ORDER_STATUS.PRODUCTION_COMPLETE,
+  [BACKEND_WORK_ORDER_STATUS.PRODUCTION_COMPLETE]: BACKEND_WORK_ORDER_STATUS.FINALIZED,
+}
+
 export const ROLE_HIERARCHY = {
   [BACKEND_ROLES.ADMIN]: 3,
   [BACKEND_ROLES.MANAGER]: 2,
@@ -87,6 +117,12 @@ export const NAV_ITEMS = [
     path: '/production',
     label: 'Production Tracking',
     icon: 'Factory',
+    minRole: BACKEND_ROLES.WORKER,
+  },
+  {
+    path: '/bom',
+    label: 'Bill of Materials',
+    icon: 'Layers',
     minRole: BACKEND_ROLES.WORKER,
   },
   {

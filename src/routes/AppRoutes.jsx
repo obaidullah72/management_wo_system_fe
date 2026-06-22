@@ -12,6 +12,7 @@ import Reports from '../pages/Reports'
 import Users from '../pages/Users'
 import Pallets from '../pages/Pallets'
 import Warehouse from '../pages/Warehouse'
+import Bom from '../pages/Bom'
 
 export default function AppRoutes() {
   return (
@@ -28,6 +29,7 @@ export default function AppRoutes() {
             <Route path="items" element={<Items />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="production" element={<ProductionTracking />} />
+            <Route path="bom" element={<Bom />} />
             <Route path="pallets" element={<Pallets />} />
             <Route path="warehouse" element={<Warehouse />} />
 

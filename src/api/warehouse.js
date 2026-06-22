@@ -1,7 +1,7 @@
 import { apiClient, unwrapResponse } from './client'
 
-export async function getWarehouseLocations() {
-  const response = await apiClient.get('/warehouse/locations')
+export async function getWarehouseLocations(params = {}) {
+  const response = await apiClient.get('/warehouse/locations', { params })
   return unwrapResponse(response)
 }
 

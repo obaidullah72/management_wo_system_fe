@@ -1,12 +1,16 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import ScrollReveal from '../components/ui/ScrollReveal'
+import Button from '../components/ui/Button'
+import Modal from '../components/ui/Modal'
+import { FormField, SelectInput, TextArea, TextInput } from '../components/ui/FormField'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ErrorMessage from '../components/ui/ErrorMessage'
 import { useAuth } from '../context/AuthContext'
-import { getProductionHistory } from '../api/production'
+import { getProductionHistory, recordProduction } from '../api/production'
 import { getWorkOrders } from '../api/workOrders'
 import { getItems } from '../api/items'
 import { getUsers } from '../api/users'
@@ -19,7 +23,15 @@ import {
 import { BACKEND_WORK_ORDER_STATUS } from '../constants'
 
 export default function ProductionTracking() {
+  const queryClient = useQueryClient()
   const { isManagerOrAdmin } = useAuth()
+  const [recordOpen, setRecordOpen] = useState(false)
+  const [form, setForm] = useState({
+    work_order_id: '',
+    quantity_produced: '',
+    notes: '',
+  })
+  const [formError, setFormError] = useState('')
 
   const productionQuery = useQuery({
     queryKey: ['production', 'history'],
@@ -42,6 +54,25 @@ export default function ProductionTracking() {
     enabled: isManagerOrAdmin,
   })
 
+  const recordMutation = useMutation({
+    mutationFn: () =>
+      recordProduction({
+        work_order_id: form.work_order_id,
+        quantity_produced: parseFloat(form.quantity_produced),
+        notes: form.notes.trim() || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production'] })
+      queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      setRecordOpen(false)
+      setForm({ work_order_id: '', quantity_produced: '', notes: '' })
+      setFormError('')
+    },
+    onError: (error) => setFormError(getErrorMessage(error)),
+  })
+
   const isLoading =
     productionQuery.isLoading ||
     workOrdersQuery.isLoading ||
@@ -58,11 +89,17 @@ export default function ProductionTracking() {
   const usersMap = buildLookup(usersQuery.data ?? [])
   const workOrdersRawMap = buildLookup(workOrdersQuery.data ?? [])
 
+  const inProductionOrders = useMemo(
+    () =>
+      (workOrdersQuery.data ?? []).filter(
+        (wo) => wo.status === BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION
+      ),
+    [workOrdersQuery.data]
+  )
+
   const inProduction = useMemo(() => {
-    return (workOrdersQuery.data ?? [])
-      .filter((wo) => wo.status === BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION)
-      .map((wo) => mapWorkOrder(wo, itemsMap, usersMap))
-  }, [workOrdersQuery.data, itemsMap, usersMap])
+    return inProductionOrders.map((wo) => mapWorkOrder(wo, itemsMap, usersMap))
+  }, [inProductionOrders, itemsMap, usersMap])
 
   const productionRecords = useMemo(() => {
     return (productionQuery.data ?? []).map((record) =>
@@ -79,12 +116,9 @@ export default function ProductionTracking() {
       key: 'quantityProduced',
       label: 'Qty Produced',
       render: (row) => (
-        <span className="font-medium text-emerald-700 transition-transform hover:scale-110">
-          +{row.quantityProduced}
-        </span>
+        <span className="font-medium text-emerald-700">+{row.quantityProduced}</span>
       ),
     },
-    { key: 'shift', label: 'Shift' },
     { key: 'recordedBy', label: 'Recorded By' },
     { key: 'timestamp', label: 'Timestamp' },
   ]
@@ -132,6 +166,28 @@ export default function ProductionTracking() {
       <PageHeader
         title="Production Tracking"
         description="Monitor production output, progress, and completion history"
+        action={
+          <Button
+            onClick={() => {
+              setForm({
+                work_order_id: inProductionOrders[0]?.id ?? '',
+                quantity_produced: '',
+                notes: '',
+              })
+              setFormError('')
+              setRecordOpen(true)
+            }}
+            disabled={inProductionOrders.length === 0}
+            title={
+              inProductionOrders.length === 0
+                ? 'No work orders in production'
+                : 'Record production output'
+            }
+          >
+            <Plus className="h-4 w-4" />
+            Record Production
+          </Button>
+        }
       />
 
       <div className="mb-6">
@@ -143,11 +199,9 @@ export default function ProductionTracking() {
         {inProduction.length > 0 ? (
           <DataTable columns={activeColumns} data={inProduction} delay={120} />
         ) : (
-          <ScrollReveal delay={120}>
-            <p className="hover-lift rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-              No work orders currently in production.
-            </p>
-          </ScrollReveal>
+          <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            No work orders currently in production.
+          </p>
         )}
       </div>
 
@@ -165,6 +219,62 @@ export default function ProductionTracking() {
           </p>
         )}
       </div>
+
+      <Modal
+        open={recordOpen}
+        onClose={() => setRecordOpen(false)}
+        title="Record Production"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRecordOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => recordMutation.mutate()} disabled={recordMutation.isPending}>
+              {recordMutation.isPending ? 'Recording...' : 'Record'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {formError && <ErrorMessage message={formError} />}
+          <FormField label="Work Order" htmlFor="prod-wo">
+            <SelectInput
+              id="prod-wo"
+              value={form.work_order_id}
+              onChange={(e) => setForm({ ...form, work_order_id: e.target.value })}
+            >
+              <option value="">Select work order...</option>
+              {inProductionOrders.map((wo) => {
+                const item = itemsMap[wo.item_id]
+                return (
+                  <option key={wo.id} value={wo.id}>
+                    {wo.work_order_number} — {item?.name ?? wo.item_id} (
+                    {wo.quantity_completed}/{wo.quantity_ordered})
+                  </option>
+                )
+              })}
+            </SelectInput>
+          </FormField>
+          <FormField label="Quantity Produced" htmlFor="prod-qty">
+            <TextInput
+              id="prod-qty"
+              type="number"
+              min="0.01"
+              step="any"
+              required
+              value={form.quantity_produced}
+              onChange={(e) => setForm({ ...form, quantity_produced: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Notes" htmlFor="prod-notes">
+            <TextArea
+              id="prod-notes"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </FormField>
+        </div>
+      </Modal>
     </div>
   )
 }

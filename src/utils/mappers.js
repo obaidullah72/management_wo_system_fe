@@ -208,3 +208,43 @@ export function mapWarehouseLocation(location) {
   }
 }
 
+export function mapBom(bom, itemsMap = {}) {
+  const finishedGood = itemsMap[bom.finished_good_id]
+  return {
+    id: bom.id,
+    finishedGoodId: bom.finished_good_id,
+    finishedGoodName: finishedGood?.name ?? bom.finished_good_id,
+    finishedGoodSku: finishedGood?.sku ?? '—',
+    version: bom.version,
+    lineCount: bom.lines?.length ?? 0,
+    isActive: bom.is_active,
+    lines: (bom.lines ?? []).map((line) => {
+      const item = itemsMap[line.item_id]
+      return {
+        itemId: line.item_id,
+        itemName: item?.name ?? line.item_id,
+        sku: item?.sku ?? '—',
+        quantityPerUnit: line.quantity_per_unit,
+        wastePercent: line.waste_percent ?? 0,
+      }
+    }),
+    createdAt: formatDateTime(bom.created_at),
+    raw: bom,
+  }
+}
+
+export function mapInventoryTransaction(tx, itemsMap = {}) {
+  const item = itemsMap[tx.item_id]
+  return {
+    id: tx.id,
+    itemName: item?.name ?? tx.item_id,
+    sku: item?.sku ?? '—',
+    transactionType: tx.transaction_type?.replace(/_/g, ' ') ?? '—',
+    quantityChange: tx.quantity_change,
+    quantityAfter: tx.quantity_after,
+    notes: tx.notes ?? '—',
+    createdAt: formatDateTime(tx.created_at),
+    raw: tx,
+  }
+}
+

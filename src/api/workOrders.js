@@ -31,3 +31,12 @@ export async function updateWorkOrderStatus(id, status) {
   const response = await apiClient.patch(`/work-orders/${id}/status`, { status })
   return unwrapResponse(response)
 }
+
+export async function getWorkOrderProgress(id) {
+  const response = await apiClient.get(`/work-orders/${id}/progress`)
+  return unwrapResponse(response)
+}
+
+export async function deleteWorkOrder(id) {
+  await apiClient.delete(`/work-orders/${id}`)
+}

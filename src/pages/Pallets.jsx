@@ -1,30 +1,53 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { MapPin, Plus, RefreshCw } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
 import DataTable from '../components/ui/DataTable'
 import Button from '../components/ui/Button'
+import Modal from '../components/ui/Modal'
+import { FormField, SelectInput, TextInput } from '../components/ui/FormField'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ErrorMessage from '../components/ui/ErrorMessage'
-import { getPallets } from '../api/pallets'
+import { useAuth } from '../context/AuthContext'
+import {
+  createPallet,
+  getPallets,
+  movePallet,
+  updatePalletStatus,
+} from '../api/pallets'
 import { getItems } from '../api/items'
+import { getWorkOrders } from '../api/workOrders'
 import { getWarehouseLocations } from '../api/warehouse'
 import { getErrorMessage } from '../api/client'
 import { buildLookup, mapPallet } from '../utils/mappers'
+import {
+  BACKEND_PALLET_STATUS,
+  BACKEND_WORK_ORDER_STATUS,
+  PALLET_STATUS_LABELS,
+} from '../constants'
 
 const statusColors = {
-  in_warehouse: 'bg-blue-100 text-blue-700',
-  in_transit: 'bg-amber-100 text-amber-700',
-  shipped: 'bg-emerald-100 text-emerald-700',
-  quarantined: 'bg-red-100 text-red-700',
+  [BACKEND_PALLET_STATUS.IN_PRODUCTION]: 'bg-amber-100 text-amber-700',
+  [BACKEND_PALLET_STATUS.IN_WAREHOUSE]: 'bg-blue-100 text-blue-700',
+  [BACKEND_PALLET_STATUS.SHIPPED]: 'bg-emerald-100 text-emerald-700',
 }
 
-function formatPalletStatus(status) {
-  if (!status) return '—'
-  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+const emptyCreateForm = {
+  work_order_id: '',
+  item_id: '',
+  quantity: '',
+  warehouse_location_id: '',
 }
 
 export default function Pallets() {
+  const queryClient = useQueryClient()
+  const { isManagerOrAdmin } = useAuth()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [moveTarget, setMoveTarget] = useState(null)
+  const [moveLocationId, setMoveLocationId] = useState('')
+  const [createForm, setCreateForm] = useState(emptyCreateForm)
+  const [formError, setFormError] = useState('')
+
   const palletsQuery = useQuery({
     queryKey: ['pallets'],
     queryFn: () => getPallets(),
@@ -35,14 +58,61 @@ export default function Pallets() {
     queryFn: () => getItems({ active_only: true }),
   })
 
+  const workOrdersQuery = useQuery({
+    queryKey: ['work-orders'],
+    queryFn: () => getWorkOrders(),
+  })
+
   const locationsQuery = useQuery({
     queryKey: ['warehouse', 'locations'],
     queryFn: getWarehouseLocations,
   })
 
-  const isLoading =
-    palletsQuery.isLoading || itemsQuery.isLoading || locationsQuery.isLoading
-  const error = palletsQuery.error || itemsQuery.error || locationsQuery.error
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createPallet({
+        work_order_id: createForm.work_order_id,
+        item_id: createForm.item_id,
+        quantity: parseFloat(createForm.quantity),
+        warehouse_location_id: createForm.warehouse_location_id || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pallets'] })
+      queryClient.invalidateQueries({ queryKey: ['warehouse'] })
+      setCreateOpen(false)
+      setCreateForm(emptyCreateForm)
+      setFormError('')
+    },
+    onError: (error) => setFormError(getErrorMessage(error)),
+  })
+
+  const moveMutation = useMutation({
+    mutationFn: () => movePallet(moveTarget.palletId, moveLocationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pallets'] })
+      queryClient.invalidateQueries({ queryKey: ['warehouse'] })
+      setMoveTarget(null)
+      setMoveLocationId('')
+      setFormError('')
+    },
+    onError: (error) => setFormError(getErrorMessage(error)),
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }) => updatePalletStatus(id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pallets'] }),
+    onError: (error) => setFormError(getErrorMessage(error)),
+  })
+
+  const eligibleWorkOrders = useMemo(
+    () =>
+      (workOrdersQuery.data ?? []).filter(
+        (wo) =>
+          wo.status === BACKEND_WORK_ORDER_STATUS.IN_PRODUCTION ||
+          wo.status === BACKEND_WORK_ORDER_STATUS.PRODUCTION_COMPLETE
+      ),
+    [workOrdersQuery.data]
+  )
 
   const pallets = useMemo(() => {
     const itemsMap = buildLookup(itemsQuery.data ?? [])
@@ -51,6 +121,15 @@ export default function Pallets() {
       mapPallet(pallet, itemsMap, locationsMap)
     )
   }, [palletsQuery.data, itemsQuery.data, locationsQuery.data])
+
+  const handleWorkOrderChange = (workOrderId) => {
+    const wo = eligibleWorkOrders.find((order) => order.id === workOrderId)
+    setCreateForm({
+      ...createForm,
+      work_order_id: workOrderId,
+      item_id: wo?.item_id ?? '',
+    })
+  }
 
   const columns = [
     { key: 'id', label: 'Pallet #' },
@@ -66,12 +145,55 @@ export default function Pallets() {
             statusColors[row.status] || 'bg-slate-100 text-slate-600'
           }`}
         >
-          {formatPalletStatus(row.status)}
+          {PALLET_STATUS_LABELS[row.status] ?? row.status}
         </span>
       ),
     },
     { key: 'createdAt', label: 'Created' },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (row) => (
+        <div className="flex gap-1">
+          {row.status !== BACKEND_PALLET_STATUS.SHIPPED && (
+            <button
+              type="button"
+              onClick={() => {
+                setMoveTarget(row)
+                setMoveLocationId('')
+                setFormError('')
+              }}
+              className="rounded p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
+              title="Move pallet"
+            >
+              <MapPin className="h-4 w-4" />
+            </button>
+          )}
+          {isManagerOrAdmin && row.status === BACKEND_PALLET_STATUS.IN_WAREHOUSE && (
+            <button
+              type="button"
+              onClick={() =>
+                statusMutation.mutate({
+                  id: row.palletId,
+                  status: BACKEND_PALLET_STATUS.SHIPPED,
+                })
+              }
+              className="rounded p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700"
+              title="Mark as shipped"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      ),
+    },
   ]
+
+  const isLoading =
+    palletsQuery.isLoading ||
+    itemsQuery.isLoading ||
+    workOrdersQuery.isLoading ||
+    locationsQuery.isLoading
 
   if (isLoading) {
     return (
@@ -80,6 +202,12 @@ export default function Pallets() {
       </div>
     )
   }
+
+  const error =
+    palletsQuery.error ||
+    itemsQuery.error ||
+    workOrdersQuery.error ||
+    locationsQuery.error
 
   if (error) {
     return <ErrorMessage message={getErrorMessage(error)} />
@@ -91,12 +219,27 @@ export default function Pallets() {
         title="Pallet Tracking"
         description="Track pallets from production through warehouse storage"
         action={
-          <Button disabled title="Create form coming soon">
+          <Button
+            onClick={() => {
+              const firstWo = eligibleWorkOrders[0]
+              setCreateForm({
+                ...emptyCreateForm,
+                work_order_id: firstWo?.id ?? '',
+                item_id: firstWo?.item_id ?? '',
+              })
+              setFormError('')
+              setCreateOpen(true)
+            }}
+          >
             <Plus className="h-4 w-4" />
             Create Pallet
           </Button>
         }
       />
+
+      {formError && !createOpen && !moveTarget && (
+        <ErrorMessage message={formError} className="mb-4" />
+      )}
 
       {pallets.length > 0 ? (
         <DataTable columns={columns} data={pallets} delay={100} />
@@ -105,6 +248,104 @@ export default function Pallets() {
           No pallets found.
         </p>
       )}
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Create Pallet"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : 'Create'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {formError && <ErrorMessage message={formError} />}
+          <FormField label="Work Order" htmlFor="pallet-wo">
+            <SelectInput
+              id="pallet-wo"
+              value={createForm.work_order_id}
+              onChange={(e) => handleWorkOrderChange(e.target.value)}
+            >
+              <option value="">Select work order...</option>
+              {eligibleWorkOrders.map((wo) => (
+                <option key={wo.id} value={wo.id}>
+                  {wo.work_order_number}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+          <FormField label="Quantity" htmlFor="pallet-qty">
+            <TextInput
+              id="pallet-qty"
+              type="number"
+              min="0.01"
+              step="any"
+              required
+              value={createForm.quantity}
+              onChange={(e) => setCreateForm({ ...createForm, quantity: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Warehouse Location (optional)" htmlFor="pallet-loc">
+            <SelectInput
+              id="pallet-loc"
+              value={createForm.warehouse_location_id}
+              onChange={(e) =>
+                setCreateForm({ ...createForm, warehouse_location_id: e.target.value })
+              }
+            >
+              <option value="">None — in production</option>
+              {(locationsQuery.data ?? []).map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.location_code} ({loc.current_pallet_count}/{loc.capacity})
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(moveTarget)}
+        onClose={() => setMoveTarget(null)}
+        title={`Move Pallet ${moveTarget?.id ?? ''}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMoveTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => moveMutation.mutate()}
+              disabled={moveMutation.isPending || !moveLocationId}
+            >
+              {moveMutation.isPending ? 'Moving...' : 'Move'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {formError && <ErrorMessage message={formError} />}
+          <FormField label="Destination Location" htmlFor="move-loc">
+            <SelectInput
+              id="move-loc"
+              value={moveLocationId}
+              onChange={(e) => setMoveLocationId(e.target.value)}
+            >
+              <option value="">Select location...</option>
+              {(locationsQuery.data ?? []).map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.location_code} — {loc.zone ?? 'No zone'}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        </div>
+      </Modal>
     </div>
   )
 }

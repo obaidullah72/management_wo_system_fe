@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -9,10 +10,13 @@ import {
   Users,
   Boxes,
   MapPin,
+  Layers,
   LogOut,
+  KeyRound,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { getNavItemsForRole } from '../../constants'
+import ChangePasswordModal from '../auth/ChangePasswordModal'
 
 const iconMap = {
   LayoutDashboard,
@@ -24,6 +28,7 @@ const iconMap = {
   Users,
   Boxes,
   MapPin,
+  Layers,
 }
 
 function getInitials(name) {
@@ -38,6 +43,7 @@ function getInitials(name) {
 
 export default function Sidebar() {
   const { user, roleLabel, logout } = useAuth()
+  const [passwordOpen, setPasswordOpen] = useState(false)
   const navItems = getNavItemsForRole(user?.role)
 
   return (
@@ -88,6 +94,14 @@ export default function Sidebar() {
           </div>
           <button
             type="button"
+            onClick={() => setPasswordOpen(true)}
+            title="Change password"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+          >
+            <KeyRound className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={logout}
             title="Sign out"
             className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
@@ -96,6 +110,8 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
+
+      <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </aside>
   )
 }
